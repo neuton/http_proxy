@@ -16,14 +16,12 @@ def parse_host_port(string, default_host=None, default_port=None):
 	host = port = None
 	for arg in string.split():
 		a = arg.split(':')
-		if len(a) == 2:
-			host = a[0] or host
-			port = int(a[1] or port)
-		elif len(a) == 1:
-			try:
-				port = int(a[0])
-			except ValueError:
-				host = a[0]
+		try:
+			port = int(a[-1])
+		except ValueError:
+			host = arg or host
+		else:
+			host = ':'.join(a[:-1]) or host
 	return host or default_host, port or default_port
 
 
@@ -99,6 +97,7 @@ class ClientProcess(mp.Process):
 					self.run_tunnel()
 				rmeta = response.get_meta()
 				keep_alive = meta.has_key('Connection') and meta['Connection'] == 'keep-alive'
+				keep_alive = keep_alive and meta.has_key('Proxy-Connection') and meta['Proxy-Connection'] == 'keep-alive'
 				keep_alive = keep_alive and rmeta.has_key('Connection') and rmeta['Connection'] == 'keep-alive'
 				if not keep_alive:
 					self.clean()
