@@ -1,15 +1,16 @@
-HTTP proxy
+Transparent HTTP proxy
 ===========
 A simple transparent HTTP proxy server in Python.
 
 Usage
 -----------
-`./http_proxy.py [host] [port]`
+`python proxy.py [host] [port]`
 
 TODO
 -----------
 - transparently pass HTTPS through
 - somehow signal a client browser (I guess that's the solution) about problems with outgoing connection to server (test deviantart.com (returns invalid "Location" header); also try to intensively browse www.deviantart.com)
+- make nice logging
 - refactor all this mess some day
 
 Another usage example

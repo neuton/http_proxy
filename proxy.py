@@ -106,7 +106,8 @@ class ClientProcess(mp.Process):
 		except KeyboardInterrupt:
 			self.clean()
 		except Exception as e:
-			print e
+			if str(e).strip():
+				print e
 			self.clean()
 	
 	def clean(self):
