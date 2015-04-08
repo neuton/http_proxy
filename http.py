@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-
 class Http():
 	
 	def __init__(self, *args, **kwargs):
