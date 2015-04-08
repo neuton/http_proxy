@@ -4,11 +4,11 @@ import socket, multiprocessing as mp, sys, time
 from http import HttpRequest, HttpResponse
 
 
-def filter_request(request):
+def filter_request(client_addr, server_addr, request):
 	return request
 
 
-def filter_response(response):
+def filter_response(client_addr, server_saddr, response):
 	return response
 
 
@@ -51,7 +51,8 @@ class ClientProcess(mp.Process):
 		self.si = si
 		self.so = None
 		self.bufsize = bufsize
-		self.host = self.port = None
+		self.client_addr = si.getpeername()
+		self.server_addr = None
 	
 	def run_tunnel(self):
 		print '--- TCP tunnel established'
@@ -71,28 +72,28 @@ class ClientProcess(mp.Process):
 					request.append(r)
 				meta = request.get_meta()
 				if meta.has_key('Host'):
-					host, port = parse_host_port(meta['Host'], default_port=80)
-					if (host, port) == self.s.getsockname():	# prevent self-nuke
+					server_addr = parse_host_port(meta['Host'], default_port=80)
+					if server_addr == self.s.getsockname():	# prevent self-nuke
 						raise socket.error
-					if (host, port) != (self.host, self.port):
+					if server_addr != self.server_addr:
 						if self.so is not None:
-							print '[-] ' + conn_str(self.si.getpeername(), (self.host, self.port))
+							print '[-] ' + conn_str(self.client_addr, self.server_addr)
 							self.so.shutdown(socket.SHUT_RDWR)
 							self.so.close()
-						print '[+] ' + conn_str(self.si.getpeername(), (host, port))
-						self.host, self.port = host, port
+						print '[+] ' + conn_str(self.client_addr, server_addr)
+						self.server_addr = server_addr
 				elif self.so is None:
 					raise socket.error
 				self.so = socket.socket()
-				self.so.connect((host, port))
-				self.so.sendall(filter_request(request).get_raw())
+				self.so.connect(server_addr)
+				self.so.sendall(filter_request(self.client_addr, server_addr, request).get_raw())
 				response = HttpResponse()
 				while not response.is_complete():
 					r = self.so.recv(self.bufsize)
 					if not r:
 						break
 					response.append(r)
-				self.si.sendall(filter_response(response).get_raw())
+				self.si.sendall(filter_response(self.client_addr, server_addr, response).get_raw())
 				if request.get_method() == 'CONNECT' and response.get_status_comment() == 'OK':
 					self.run_tunnel()
 				rmeta = response.get_meta()
@@ -110,7 +111,7 @@ class ClientProcess(mp.Process):
 	
 	def clean(self):
 		if self.so is not None:
-			print '[-] ' + conn_str(self.si.getpeername(), (self.host, self.port))
+			print '[-] ' + conn_str(self.client_addr, self.server_addr)
 			try:
 				self.so.shutdown(socket.SHUT_RDWR)
 				self.so.close()
