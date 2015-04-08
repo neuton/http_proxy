@@ -19,8 +19,8 @@ Another usage example
 #!/usr/bin/env python
 
 from http import HttpResponse
-from http_proxy import parse_host_port
-import http_proxy, sys
+from proxy import parse_host_port
+import proxy, sys
 
 def filter_response(caddr, saddr, response):
 	if '.'.join(saddr[0].split('.')[-2:]) == 'example.com':
@@ -39,6 +39,6 @@ def filter_response(caddr, saddr, response):
 	return response
 
 if __name__ == '__main__':
-	http_proxy.filter_response = filter_response
-	http_proxy.Server(*parse_host_port(' '.join(sys.argv[1:]), 'localhost', 8080)).run()
+	proxy.filter_response = filter_response
+	proxy.Server(*parse_host_port(' '.join(sys.argv[1:]), 'localhost', 8080)).run()
 ```
