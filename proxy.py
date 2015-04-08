@@ -125,7 +125,7 @@ class ClientProcess(mp.Process):
 			pass
 
 
-class ServerProcess(mp.Process):
+class Server(mp.Process):
 	
 	def __init__(self, host, port):
 		mp.Process.__init__(self)
@@ -149,19 +149,6 @@ class ServerProcess(mp.Process):
 				self.s.close()
 			except:
 				pass
-
-
-class Server():
-	
-	def __init__(self, host, port):
-		self.process = ServerProcess(host, port)
-	
-	def run(self):
-		try:
-			self.process.start()
-			self.process.join()
-		except KeyboardInterrupt:
-			pass
 
 
 if __name__ == '__main__':
