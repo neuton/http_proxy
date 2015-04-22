@@ -142,13 +142,20 @@ class Server(mp.Process):
 			while True:
 				cs, addr = self.s.accept()
 				ClientProcess(self.s, cs).start()
+		except KeyboardInterrupt:
+			self.clean()
+		except Exception as e:
+			if str(e).strip():
+				print e
+			self.clean()
+	
+	def clean(self):
+		print 'Shutting down...'
+		try:
+			self.s.shutdown(socket.SHUT_RDWR)
+			self.s.close()
 		except:
-			print 'Shutting down...'
-			try:
-				self.s.shutdown(socket.SHUT_RDWR)
-				self.s.close()
-			except:
-				pass
+			pass
 
 
 if __name__ == '__main__':
