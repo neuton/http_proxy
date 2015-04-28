@@ -67,7 +67,7 @@ def http_should_keep_alive(http):
 
 class CommunicationProcess(mp.Process):
 	
-	def __init__(self, s1, s2, bufsize=65535):
+	def __init__(self, s1, s2, bufsize=4096):
 		mp.Process.__init__(self)
 		self.s1, self.s2, self.bufsize = s1, s2, bufsize
 	
@@ -84,7 +84,7 @@ class CommunicationProcess(mp.Process):
 
 class ClientProcess(mp.Process):
 	
-	def __init__(self, client_socket, bufsize=65535):
+	def __init__(self, client_socket, bufsize=4096):
 		mp.Process.__init__(self)
 		self.client_socket = client_socket
 		self.server_socket = None
