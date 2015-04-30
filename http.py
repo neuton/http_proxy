@@ -31,25 +31,29 @@ class Http():
 			else:
 				content = ''
 		if not self._meta_is_complete and self._sline_is_complete:
-			self._headers += content
-			sep = ''
-			if '\r\n\r\n' in self._headers:
-				sep = '\r\n\r\n'
-			elif '\n\n' in self._headers:
-				sep = '\n\n'
-			if sep:
-				s = self._headers.split(sep)
-				self._headers = s[0]
-				content = sep.join(s[1:])
-				self._sep2 = sep
+			if content[:len(self._sep1)] == self._sep1:
 				self._meta_is_complete = True
-				meta = self.get_meta()
-				if meta.has_key('Content-Length'):
-					self._body_size = int(meta['Content-Length'])
-				else:
-					self._is_complete = True
+				self._is_complete = True
 			else:
-				content = ''
+				self._headers += content
+				sep = ''
+				if '\r\n\r\n' in self._headers:
+					sep = '\r\n\r\n'
+				elif '\n\n' in self._headers:
+					sep = '\n\n'
+				if sep:
+					s = self._headers.split(sep)
+					self._headers = s[0]
+					content = sep.join(s[1:])
+					self._sep2 = sep
+					self._meta_is_complete = True
+					meta = self.get_meta()
+					if meta.has_key('Content-Length'):
+						self._body_size = int(meta['Content-Length'])
+					else:
+						self._is_complete = True
+				else:
+					content = ''
 		if not self._is_complete and self._meta_is_complete:
 			i = self._body_size - len(self._body)
 			if i > len(content):
