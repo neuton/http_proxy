@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 
-#from traceback import print_exc
 import socket, multiprocessing as mp, sys, time
 from http import HttpRequest, HttpResponse
-
-
-valid_request_methods = ['OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'TRACE', 'CONNECT']
+import select
 
 
 def filter_request(request):
@@ -29,8 +26,8 @@ def parse_host_port(string, default_host=None, default_port=None):
 	return host or default_host, port or default_port
 
 
-def conn_str(addr1, addr2, sep=' --> '):
-	return addr1[0] + ':' + str(addr1[1]) + sep + addr2[0] + ':' + str(addr2[1])
+def conn_str(addr1, addr2):
+	return '[%s:%i] <=> [%s:%i]' % (addr1[0], addr1[1], addr2[0], addr2[1])
 
 
 def new_socket():
@@ -60,14 +57,16 @@ def try_close_socket(s):
 def http_should_keep_alive(http):
 	meta = http.get_meta()
 	if http.get_version() == '1.1':
-		return not (meta.has_key('Connection') and meta['Connection'] == 'close')
+		return (not (meta.has_key('Connection') and meta['Connection'] == 'close')
+			and not (meta.has_key('Proxy-Connection') and meta['Proxy-Connection'] == 'close'))
 	else:
-		return meta.has_key('Connection') and meta['Connection'] == 'keep-alive'
+		return ((meta.has_key('Connection') and meta['Connection'] == 'keep-alive')
+			or (meta.has_key('Proxy-Connection') and meta['Proxy-Connection'] == 'keep-alive'))
 
 
 class CommunicationProcess(mp.Process):
 	
-	def __init__(self, s1, s2, bufsize=4096):
+	def __init__(self, s1, s2, bufsize=65535):
 		mp.Process.__init__(self)
 		self.s1, self.s2, self.bufsize = s1, s2, bufsize
 	
@@ -84,7 +83,7 @@ class CommunicationProcess(mp.Process):
 
 class ClientProcess(mp.Process):
 	
-	def __init__(self, client_socket, bufsize=4096):
+	def __init__(self, client_socket, bufsize=65535):
 		mp.Process.__init__(self)
 		self.client_socket = client_socket
 		self.server_socket = None
@@ -101,57 +100,54 @@ class ClientProcess(mp.Process):
 				self.server_socket.sendall(r)
 		except socket.error:
 			pass
-		cp.join()
-	
-	def recv_http(self, s, http):
-		while not http.is_complete():
-			r = s.recv(self.bufsize)
-			if not r:
-				raise socket.error, 'Connection closed unexpectedly'
-			http.append(r)
-		return http
+		cp.terminate()
 	
 	def recv_request(self):
-		s = self.client_socket
-		r = s.recv(self.bufsize)
-		if not r:
-			raise socket.error, 'Connection closed unexpectedly'
-		m = r.split()[0].upper()
-		if m not in map(lambda a: a[:len(m)], valid_request_methods): # if request is definitely invalid
-			return None
 		request = HttpRequest()
-		request.append(r)
-		return self.recv_http(s, request)
+		while not request.is_complete():
+			r = self.client_socket.recv(self.bufsize)
+			if not r:
+				raise socket.error, 'Connection closed unexpectedly while getting request from client'
+			request.append(r)
+		return request
 	
 	def recv_response(self):
-		s = self.server_socket
-		r = s.recv(self.bufsize)
-		if not r:
-			raise socket.error, 'Connection closed unexpectedly'
-		#m = r.split()[0].upper()
-		#if m[:4] != 'HTTP'[:len(m)]: # if response is definitely invalid
-		#	return None
 		response = HttpResponse()
-		response.append(r)
-		return self.recv_http(s, response)
-	
-	def send_http(self, s, http):
-		s.sendall(http.get_raw())
+		#while not response.is_complete()
+		while True:														#
+			r = self.server_socket.recv(self.bufsize)
+			if not r:
+				raise socket.error, 'Connection closed unexpectedly while getting response from server'
+			#response.append(r)
+			whats_left = response.append(r)								#
+			response._body += whats_left								#
+			a, _, _ = select.select([self.server_socket], [], [], 0.3)	# temporal (hopefully) hack
+			if not a:													#
+				break													#
+		return response
 	
 	def send_response(self, response):
-		self.send_http(self.client_socket, response)
+		self.client_socket.sendall(response.get_raw())
 	
 	def send_request(self, request):
-		self.send_http(self.server_socket, request)
+		self.server_socket.sendall(request.get_raw())
 	
 	def set_server(self, host):
 		c_addr = self.client_socket.getpeername()
 		s_addr = parse_host_port(host, default_port=80)
+		try:
+			socket.gethostbyname(s_addr[0])
+		except socket.error:
+			resp = HttpResponse(sline='HTTP/1.1 502 DNS Lookup Failed', meta={'Connection': 'close'})
+			self.send_response(resp)
+			raise socket.error, 'DNS lookup failed'
 		if s_addr == self.client_socket.getsockname():	# prevent self-nuke
 			raise socket.error, "Can't proxy to self!"
 		if socket_is_connected(self.server_socket):
 			s_addr_0 = self.server_socket.getpeername()
-			if s_addr != s_addr_0:
+			if s_addr == s_addr_0:
+				return
+			else:
 				try_close_socket(self.server_socket)
 				print '[-] ' + conn_str(c_addr, s_addr_0)
 		self.server_socket = new_socket()
@@ -162,34 +158,29 @@ class ClientProcess(mp.Process):
 		try:
 			while True:
 				req = self.recv_request()
-				if req is None:
-					raise socket.error, 'Invalid HTTP request'
+				print '[>]', req.get_sline()
 				if req.get_method() == 'CONNECT':
-					self.send_response(HttpResponse(raw='HTTP/1.1 200 OK\r\n\r\n'))
 					self.set_server(req.get_path())
+					resp = HttpResponse(sline='HTTP/1.1 200 OK')
+					self.send_response(resp)
 					self.run_tunnel()
 					break
 				headers = req.get_meta()
 				if headers.has_key('Host'):
-					try:
-						socket.gethostbyname(headers['Host'])
-					except socket.error:
-						self.send_response(HttpResponse(raw='HTTP/1.1 502 DNS Lookup Failed\r\nConnection: close\r\n\r\n'))
-						break
-					self.set_server(headers['Host'])
+					host = headers['Host']
+					self.set_server(host)
 				elif not socket_is_connected(self.server_socket):
 					raise socket.error, 'No "Host" header specified in request'
 				self.send_request(filter_request(req))
 				resp = self.recv_response()
+				print '[<]', resp.get_sline()
 				self.send_response(filter_response(req, resp))
 				if not http_should_keep_alive(req) or not http_should_keep_alive(resp):
 					break
 		except KeyboardInterrupt:
 			pass
 		except Exception, e:
-			if str(e).strip():
-				print e
-			#print_exc()
+			print '[E]', e
 		self.clean()
 	
 	def clean(self):
@@ -218,8 +209,7 @@ class Server(mp.Process):
 		except KeyboardInterrupt:
 			pass
 		except Exception as e:
-			if str(e).strip():
-				print e
+			print e
 		self.clean()
 	
 	def clean(self):

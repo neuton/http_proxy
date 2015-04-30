@@ -8,12 +8,11 @@ Usage
 
 TODO
 ----------
-- somehow signal a client browser (I guess that's the solution) about problems with outgoing connection to server (test deviantart.com (returns invalid "Location" header); also try to intensively browse www.deviantart.com)
-- actually, www.deviantart.com doesn't work anymore at all
-- as well as www.wikipedia.com
-- while en.wikipedia.org works only partially
-- ...
-- maybe make nice logging
+- close sockets properly when required
+- implement decoding support and remove the hack
+- make nice logging
+- add some initial requests modification to be transparent for a server (test en.wikipedia.org, arxiv.org)
+- add addresses filtering for HTTPS
 
 Filtering usage example
 ----------
