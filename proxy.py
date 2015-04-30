@@ -216,7 +216,10 @@ class Server(mp.Process):
 		try_close_socket(self.s)
 
 
-if __name__ == '__main__':
-	
+def run():
 	host, port = parse_host_port(' '.join(sys.argv[1:]), 'localhost', 8080)
 	Server(host, port).run()
+
+
+if __name__ == '__main__':
+	run()

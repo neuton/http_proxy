@@ -13,6 +13,7 @@ TODO
 - make nice logging
 - add some initial requests modification to be transparent for a server (test en.wikipedia.org, arxiv.org)
 - add addresses filtering for HTTPS
+- unidentified issue while getting response (ERR_EMPTY_RESPONSE; test webmail.epfl.ch)
 
 Filtering usage example
 ----------
@@ -20,9 +21,8 @@ Filtering usage example
 #!/usr/bin/env python
 
 from traceback import print_exc
-from http import HttpRequest, HttpResponse
-from proxy import parse_host_port
-import proxy, sys
+from http import *
+import proxy
 
 filter_hosts = ['example.com', 'example.org']
 
@@ -41,13 +41,13 @@ def filter_response(request, response):
 		if request.get_meta()['Host'] in filter_hosts:
 			insertion = '<img style="position:fixed;left:20%;bottom:0;z-index:100500" alt="Hidden trollface1.png" src="//lurkmore.so/images/8/80/Hidden_trollface1.png" width="192" height="56">'
 			meta = response.get_meta()
-			if meta.has_key('Content-Type') and 'text/html' in meta['Content-Type'].lower():
+			if meta.has_key('Content-Type') and 'text/html' in meta['Content-Type'].lower() and not meta.has_key('Content-Encoding'):
 				if meta.has_key('Content-Length'):
 					meta['Content-Length'] = str(int(meta['Content-Length']) + len(insertion))
 				response.set_meta(meta)
 				body = response.get_body()
-				find_tag = '<body>'
-				i = body.lower().find(find_tag) + len(find_tag)
+				find_tag = '</body>'
+				i = body.lower().rfind(find_tag)# + len(find_tag)
 				response.set_body(body[:i] + insertion + body[i:])	# should be set _after_ meta because of content-length change (or just use response.set(...) to set both simultaneously)
 				print '>-< insertion done'
 	except:
@@ -57,5 +57,5 @@ def filter_response(request, response):
 if __name__ == '__main__':
 	proxy.filter_request = filter_request
 	proxy.filter_response = filter_response
-	proxy.Server(*parse_host_port(' '.join(sys.argv[1:]), 'localhost', 8080)).run()
+	proxy.run()
 ```
