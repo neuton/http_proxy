@@ -46,8 +46,7 @@ def filter_response(request, response):
 					meta['Content-Length'] = str(int(meta['Content-Length']) + len(insertion))
 				response.set_meta(meta)
 				body = response.get_body()
-				find_tag = '</body>'
-				i = body.lower().rfind(find_tag)# + len(find_tag)
+				i = body.lower().rfind('</body>')
 				response.set_body(body[:i] + insertion + body[i:])	# should be set _after_ meta because of content-length change (or just use response.set(...) to set both simultaneously)
 				print '>-< insertion done'
 	except:
