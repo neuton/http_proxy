@@ -43,7 +43,7 @@ class Http():
 					content = sep.join(s[1:])
 					self._meta_is_complete = True
 					meta = self.get_meta()
-					if meta.has_key('Content-Length'):
+					if 'Content-Length' in meta:
 						self._body_size = int(meta['Content-Length'])
 				else:
 					content = ''

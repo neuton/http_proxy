@@ -27,7 +27,7 @@ def parse_host_port(string, default_host=None, default_port=None):
 
 
 def conn_str(addr1, addr2):
-	return '[%s:%i] <=> [%s:%i]' % (addr1[0], addr1[1], addr2[0], addr2[1])
+	return '[%s:%i] <=> [%s:%i]' % (addr1 + addr2)
 
 
 def new_socket():
@@ -57,11 +57,9 @@ def try_close_socket(s):
 def http_should_keep_alive(http):
 	meta = http.get_meta()
 	if http.get_version() == '1.1':
-		return (not (meta.has_key('Connection') and meta['Connection'] == 'close')
-			and not (meta.has_key('Proxy-Connection') and meta['Proxy-Connection'] == 'close'))
+		return not (meta.get('Connection') == 'close' or meta.get('Proxy-Connection') == 'close')
 	else:
-		return ((meta.has_key('Connection') and meta['Connection'] == 'keep-alive')
-			or (meta.has_key('Proxy-Connection') and meta['Proxy-Connection'] == 'keep-alive'))
+		return meta.get('Connection') == 'keep-alive' or meta.get('Proxy-Connection') == 'keep-alive'
 
 
 class CommunicationProcess(mp.Process):
@@ -117,7 +115,10 @@ class ClientProcess(mp.Process):
 		while True:														#
 			r = self.server_socket.recv(self.bufsize)
 			if not r:
-				raise socket.error, 'Connection closed unexpectedly while getting response from server'
+				if not response.is_complete():							#
+					raise socket.error, 'Connection closed unexpectedly while getting response from server'
+				else:													#
+					return response										#
 			#response.append(r)
 			whats_left = response.append(r)								#
 			response._body += whats_left								#
@@ -151,7 +152,12 @@ class ClientProcess(mp.Process):
 				try_close_socket(self.server_socket)
 				print '[-] ' + conn_str(c_addr, s_addr_0)
 		self.server_socket = new_socket()
-		self.server_socket.connect(s_addr)
+		try:
+			self.server_socket.connect(s_addr)
+		except socket.error:
+			resp = HttpResponse(sline='HTTP/1.1 502 Connection Refused', meta={'Connection': 'close'})
+			self.send_response(resp)
+			raise socket.error, 'Connection Refused'
 		print '[+] ' + conn_str(c_addr, s_addr)
 	
 	def run(self):
@@ -166,7 +172,7 @@ class ClientProcess(mp.Process):
 					self.run_tunnel()
 					break
 				headers = req.get_meta()
-				if headers.has_key('Host'):
+				if 'Host' in headers:
 					host = headers['Host']
 					self.set_server(host)
 				elif not socket_is_connected(self.server_socket):
@@ -181,7 +187,8 @@ class ClientProcess(mp.Process):
 			pass
 		except Exception, e:
 			print '[E]', e
-		self.clean()
+		finally:
+			self.clean()
 	
 	def clean(self):
 		if socket_is_connected(self.client_socket) and socket_is_connected(self.server_socket):
@@ -210,7 +217,8 @@ class Server(mp.Process):
 			pass
 		except Exception as e:
 			print e
-		self.clean()
+		finally:
+			self.clean()
 	
 	def clean(self):
 		try_close_socket(self.s)
