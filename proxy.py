@@ -155,6 +155,7 @@ class ClientProcess(mp.Process):
 		try:
 			self.server_socket.connect(s_addr)
 		except socket.error:
+			# should probably change behaviour for transparent usage scenario
 			resp = HttpResponse(sline='HTTP/1.1 502 Connection Refused', meta={'Connection': 'close'})
 			self.send_response(resp)
 			raise socket.error, 'Connection Refused'
@@ -165,7 +166,7 @@ class ClientProcess(mp.Process):
 			while True:
 				req = self.recv_request()
 				print '[>]', req.get_sline()
-				if req.get_method() == 'CONNECT':
+				if req.get_method() == 'CONNECT':	# should ignore this method in transparent scenario case (proxy host not available from http though)
 					self.set_server(req.get_path())
 					resp = HttpResponse(sline='HTTP/1.1 200 OK')
 					self.send_response(resp)
