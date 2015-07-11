@@ -1,3 +1,5 @@
+import re
+
 class Http():
 	
 	def __init__(self, *args, **kwargs):
@@ -8,54 +10,62 @@ class Http():
 		self._sline = ''
 		self._headers = ''
 		self._body = ''
-		self._body_size = 0
 		self._sline_is_complete = False
 		self._meta_is_complete = False
 		self._is_complete = False
-		self._sep = '\r\n'
+		self._chunk_size = 0
+		self._chunk_size_s = ''
 	
 	def append(self, content):
 		if not self._sline_is_complete:
-			self._sline += content
-			sep = ''
-			if '\r\n' in self._sline:
-				sep = '\r\n'
-			elif '\n' in self._sline:
-				sep = '\n'
-			if sep:
-				s = self._sline.split(sep)
-				self._sline = s[0]
-				content = sep.join(s[1:])
-				self._sep = sep
+			s = re.split('\r\n|\n', (self._sline + content), 1)
+			self._sline, content = (s + [''])[:2]
+			if len(s) == 2:
 				self._sline_is_complete = True
-			else:
-				content = ''
-		if not self._meta_is_complete and self._sline_is_complete:
-			if content[:len(self._sep)] == self._sep:
+		if self._sline_is_complete and not self._meta_is_complete:
+			s = re.split('\r\n\r\n|\n\n', (self._headers + content), 1)
+			self._headers, content = (s + [''])[:2]
+			if len(s) == 2:
+				self._meta_is_complete = True
+			if self._headers and (self._headers[:2] == '\r\n' or self._headers[0] == '\n'):
 				self._meta_is_complete = True
 				self._is_complete = True
+				content, self._headers = re.split('\r\n|\n', self._headers, 1)[1], ''
+		if self._meta_is_complete and not self._is_complete:
+			if 'chunked' in (self.get_meta().get('Transfer-Encoding') or '').lower():	# RFC 7230 sec. 4.1
+				while content:
+					if self._chunk_size == 0:
+						s = re.split('\r\n|\n', (self._chunk_size_s + content).lstrip(), 1)
+						self._chunk_size_s, content = (s + [''])[:2]
+						if len(s) == 2:
+							self._chunk_size = int(self._chunk_size_s.split()[0], 16)
+							self._chunk_size_s = ''
+							if self._chunk_size == 0:
+								self._chunk_size = -1
+					if self._chunk_size > 0:
+						cs = self._chunk_size
+						self._chunk_size -= min(cs, len(content))
+						self._body += content[:cs]
+						content = content[cs:]
+					if self._chunk_size == -1:	# trailer-part
+						meta = self.get_meta()
+						tes = [e.strip().lower() for e in meta['Transfer-Encoding'].split(',')].remove('chunked')
+						if tes:
+							meta['Transfer-Encoding'] = ','.join(tes)
+						else:
+							del meta['Transfer-Encoding']
+						meta['Content-Length'] = str(len(self._body))
+						self.set_meta(meta)
+						self._meta_is_complete = False
+						self._is_complete = True
+						content = self.append('\r\n' + content)
+						break
 			else:
-				self._headers += content
-				sep = 2*self._sep
-				if sep in self._headers:
-					s = self._headers.split(sep)
-					self._headers = s[0]
-					content = sep.join(s[1:])
-					self._meta_is_complete = True
-					meta = self.get_meta()
-					if 'Content-Length' in meta:
-						self._body_size = int(meta['Content-Length'])
-				else:
-					content = ''
-		if not self._is_complete and self._meta_is_complete:
-			i = self._body_size - len(self._body)
-			if i > len(content):
-				self._body += content
-				content = ''
-			else:
+				i = int(self.get_meta().get('Content-Length') or 0) - len(self._body)
+				if i <= len(content):
+					self._is_complete = True
 				self._body += content[:i]
 				content = content[i:]
-				self._is_complete = True
 		return content
 	
 	def set_raw(self, content):
@@ -72,7 +82,7 @@ class Http():
 				self._meta_is_complete = True
 				self._is_complete = True
 			if meta is not None:
-				self._headers = self._sep.join([key + ': ' + value for key, value in meta.iteritems()])
+				self._headers = '\r\n'.join([key + ': ' + value for key, value in meta.iteritems()])
 				self._sline_is_complete = True
 				self._meta_is_complete = True
 			if sline is not None:
@@ -94,9 +104,9 @@ class Http():
 	def get_raw(self):
 		r = self._sline
 		if self._headers:
-			r += self._sep + self._headers
+			r += '\r\n' + self._headers
 		if self._meta_is_complete:
-			r += 2*self._sep + self._body
+			r += '\r\n\r\n' + self._body
 		return r
 	
 	def get_sline(self):
@@ -106,8 +116,8 @@ class Http():
 		return self._body
 	
 	def get_meta(self):
-		if self._sline_is_complete:
-			return dict([[a[0], ':'.join(a[1:]).strip()] for a in [l.split(':') for l in self._headers.split(self._sep)]])
+		if self._sline_is_complete and self._headers:
+			return dict([[a.strip() for a in l.split(':', 1)] for l in re.split('\r\n|\n', self._headers)])
 		else:
 			return dict()
 	
@@ -146,4 +156,4 @@ class HttpResponse(Http):
 		return int(self.get_sline().split()[1])
 	
 	def get_status_comment(self):
-		return ' '.join(self.get_sline().split(' ')[2:])
+		return self.get_sline().split(maxsplit=2)[2]

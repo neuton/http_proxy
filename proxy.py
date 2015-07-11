@@ -119,9 +119,7 @@ class ClientProcess(mp.Process):
 					raise socket.error, 'Connection closed unexpectedly while getting response from server'
 				else:													#
 					return response										#
-			#response.append(r)
-			whats_left = response.append(r)								#
-			response._body += whats_left								#
+			response.append(r)
 			a, _, _ = select.select([self.server_socket], [], [], 0.3)	# temporal (hopefully) hack
 			if not a:													#
 				break													#
