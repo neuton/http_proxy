@@ -9,11 +9,9 @@ Usage
 TODO
 ----------
 - close sockets properly when required
-- implement decoding support and remove the hack
 - make nice logging
 - add some initial requests modification to be transparent for a server (test en.wikipedia.org, arxiv.org)
 - add addresses filtering for HTTPS
-- unidentified issue while getting response (ERR_EMPTY_RESPONSE; test webmail.epfl.ch)
 
 Filtering usage example
 ----------
