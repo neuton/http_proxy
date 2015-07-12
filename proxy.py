@@ -111,18 +111,11 @@ class ClientProcess(mp.Process):
 	
 	def recv_response(self):
 		response = HttpResponse()
-		#while not response.is_complete()
-		while True:														#
+		while not response.is_complete():
 			r = self.server_socket.recv(self.bufsize)
 			if not r:
-				if not response.is_complete():							#
-					raise socket.error, 'Connection closed unexpectedly while getting response from server'
-				else:													#
-					return response										#
+				raise socket.error, 'Connection closed unexpectedly while getting response from server'
 			response.append(r)
-			a, _, _ = select.select([self.server_socket], [], [], 0.3)	# temporal (hopefully) hack
-			if not a:													#
-				break													#
 		return response
 	
 	def send_response(self, response):
