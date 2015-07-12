@@ -1,4 +1,4 @@
-import re
+import re, zlib
 
 class Http():
 	
@@ -48,24 +48,31 @@ class Http():
 						self._body += content[:cs]
 						content = content[cs:]
 					if self._chunk_size == -1:	# trailer-part
-						meta = self.get_meta()
-						tes = [e.strip().lower() for e in meta['Transfer-Encoding'].split(',')].remove('chunked')
-						if tes:
-							meta['Transfer-Encoding'] = ','.join(tes)
-						else:
-							del meta['Transfer-Encoding']
-						meta['Content-Length'] = str(len(self._body))
-						self.set_meta(meta)
 						self._meta_is_complete = False
 						self._is_complete = True
-						content = self.append('\r\n' + content)
-						break
+						return self.append('\r\n' + content)
 			else:
 				i = int(self.get_meta().get('Content-Length') or 0) - len(self._body)
-				if i <= len(content):
-					self._is_complete = True
 				self._body += content[:i]
+				if i <= len(content):
+					if te == 'deflate':	# RFC 7230 sec. 4.2.2
+						try:	# first try proper RFC 1950
+							self._body = zlib.decompress(self._body, zlib.MAX_WBITS)
+						except zlib.error:	# then RFC 1951
+							self._body = zlib.decompress(self._body, -zlib.MAX_WBITS)
+					elif te in ['gzip', 'x-gzip']:	# RFC 7230 sec. 4.2.3
+						self._body = zlib.decompress(self._body, zlib.MAX_WBITS+16)	# RFC 1952
+					self._is_complete = True
 				content = content[i:]
+		if self._is_complete:
+			meta = self.get_meta()
+			if (meta.get('Transfer-Encoding') or '').lower() in ['chunked', 'deflate', 'gzip', 'x-gzip']:
+				del meta['Transfer-Encoding']
+				meta['Content-Length'] = str(len(self._body))
+				self.set_meta(meta)
+			if 'Trailer' in meta:
+				del meta['Trailer']
+				self.set_meta(meta)
 		return content
 	
 	def set_raw(self, content):
