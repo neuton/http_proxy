@@ -135,12 +135,12 @@ class ClientProcess(mp.Process):
 		c_addr = self.client_socket.getpeername()
 		s_addr = parse_host_port(host, default_port=80)
 		try:
-			socket.gethostbyname(s_addr[0])
+			ip = socket.gethostbyname(s_addr[0])
 		except socket.error:
 			resp = HttpResponse(sline='HTTP/1.1 502 DNS Lookup Failed', meta={'Connection': 'close'})
 			self.send_response(resp)
 			raise socket.error, 'DNS lookup failed'
-		if s_addr == self.client_socket.getsockname():	# prevent self-nuke
+		if (ip, s_addr[1]) == self.client_socket.getsockname():	# prevent self-nuke
 			raise socket.error, "Can't proxy to self!"
 		if socket_is_connected(self.server_socket):
 			s_addr_0 = self.server_socket.getpeername()
