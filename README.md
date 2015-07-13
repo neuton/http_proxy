@@ -26,10 +26,10 @@ filter_hosts = ['example.com', 'example.org']
 
 def filter_request(request):
 	try:
-		meta = request.get_meta()
+		meta = request.meta
 		if 'Accept-Encoding' in meta:
 			del meta['Accept-Encoding']	# make sure request doesn't allow encoded response
-			request.set_meta(meta)
+			request.meta = meta
 	except:
 		print_exc()
 	return request
@@ -37,15 +37,16 @@ def filter_request(request):
 def filter_response(request, response):
 	insertion = '<img style="position:fixed;left:20%;bottom:0;z-index:100500" alt="Hidden trollface1.png" src="//lurkmore.so/images/8/80/Hidden_trollface1.png" width="192" height="56">'
 	try:
-		if request.get_meta().get('Host') in filter_hosts:
-			meta = response.get_meta()
+		if request.meta['Host'] in filter_hosts:
+			meta = response.meta
 			content_type = meta.get('Content-Type')
 			if content_type and 'text/html' in content_type.lower() and not 'Content-Encoding' in meta:
-				meta['Content-Length'] = str(int(meta['Content-Length']) + len(insertion))
-				response.set_meta(meta)
-				body = response.get_body()
+				body = response.body
 				i = body.lower().rfind('</body>')
-				response.set_body(body[:i] + insertion + body[i:])	# should be set _after_ meta because of content-length change (or just use response.set(...) to set both simultaneously)
+				body = body[:i] + insertion + body[i:]
+				meta['Content-Length'] = str(len(body))
+				response.meta = meta
+				response.body = body	# should be set _after_ meta because of content-length change (or just use response.set(...) to set both simultaneously)
 				print '>-< insertion done'
 	except:
 		print_exc()

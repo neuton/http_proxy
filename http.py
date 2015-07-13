@@ -1,10 +1,13 @@
 import re
 
-class Http():
+class Http(object):
 	
 	def __init__(self, *args, **kwargs):
 		self.clean()
 		self.set(*args, **kwargs)
+	
+	def __str__(self):
+		return self.raw
 	
 	def clean(self):
 		self._sline = ''
@@ -73,19 +76,19 @@ class Http():
 		self.append(content)
 	
 	def set(self, raw=None, sline=None, meta=None, body=None):
-		if raw is not None:
+		if raw:
 			self.set_raw(raw)
 		else:
-			if body is not None:
+			if body:
 				self._body = body
 				self._sline_is_complete = True
 				self._meta_is_complete = True
 				self._is_complete = True
-			if meta is not None:
+			if meta:
 				self._headers = '\r\n'.join([key + ': ' + value for key, value in meta.iteritems()])
 				self._sline_is_complete = True
 				self._meta_is_complete = True
-			if sline is not None:
+			if sline:
 				self._sline = sline
 				self._sline_is_complete = True
 				if not self._headers:
@@ -121,14 +124,22 @@ class Http():
 		else:
 			return dict()
 	
+	@property
 	def sline_is_complete(self):
 		return self._sline_is_complete
 	
+	@property
 	def meta_is_complete(self):
 		return self._meta_is_complete
 	
+	@property
 	def is_complete(self):
 		return self._is_complete
+	
+	raw = property(get_raw, set_raw)
+	sline = property(get_sline, set_sline)
+	meta = property(get_meta, set_meta)
+	body = property(get_body, set_body)
 
 
 class HttpRequest(Http):
@@ -145,6 +156,10 @@ class HttpRequest(Http):
 			return s[2].split('/')[1]
 		else:
 			return '0.9'
+	
+	method = property(get_method)
+	path = property(get_path)
+	version = property(get_version)
 
 
 class HttpResponse(Http):
@@ -157,3 +172,7 @@ class HttpResponse(Http):
 	
 	def get_status_comment(self):
 		return self.get_sline().split(maxsplit=2)[2]
+	
+	version = property(get_version)
+	status = property(get_status)
+	status_comment = property(get_status_comment)

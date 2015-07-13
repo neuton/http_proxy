@@ -55,8 +55,8 @@ def try_close_socket(s):
 
 
 def http_should_keep_alive(http):
-	meta = http.get_meta()
-	if http.get_version() == '1.1':
+	meta = http.meta
+	if http.version == '1.1':
 		return not (meta.get('Connection') == 'close' or meta.get('Proxy-Connection') == 'close')
 	else:
 		return meta.get('Connection') == 'keep-alive' or meta.get('Proxy-Connection') == 'keep-alive'
@@ -102,7 +102,7 @@ class ClientProcess(mp.Process):
 	
 	def recv_request(self):
 		request = HttpRequest()
-		while not request.is_complete():
+		while not request.is_complete:
 			r = self.client_socket.recv(self.bufsize)
 			if not r:
 				raise socket.error, 'Connection closed unexpectedly while getting request from client'
@@ -111,7 +111,7 @@ class ClientProcess(mp.Process):
 	
 	def recv_response(self):
 		response = HttpResponse()
-		while not response.is_complete():
+		while not response.is_complete:
 			r = self.server_socket.recv(self.bufsize)
 			if not r:
 				raise socket.error, 'Connection closed unexpectedly while getting response from server'
@@ -119,10 +119,10 @@ class ClientProcess(mp.Process):
 		return response
 	
 	def send_response(self, response):
-		self.client_socket.sendall(response.get_raw())
+		self.client_socket.sendall(response.raw)
 	
 	def send_request(self, request):
-		self.server_socket.sendall(request.get_raw())
+		self.server_socket.sendall(request.raw)
 	
 	def set_server(self, host):
 		c_addr = self.client_socket.getpeername()
@@ -156,14 +156,14 @@ class ClientProcess(mp.Process):
 		try:
 			while True:
 				req = self.recv_request()
-				print '[>]', req.get_sline()
-				if req.get_method() == 'CONNECT':	# should ignore this method in transparent scenario case (proxy host not available from http though)
-					self.set_server(req.get_path())
+				print '[>]', req.sline
+				if req.method == 'CONNECT':	# should ignore this method in transparent scenario case (proxy host not available from http though)
+					self.set_server(req.path)
 					resp = HttpResponse(sline='HTTP/1.1 200 OK')
 					self.send_response(resp)
 					self.run_tunnel()
 					break
-				headers = req.get_meta()
+				headers = req.meta
 				if 'Host' in headers:
 					host = headers['Host']
 					self.set_server(host)
@@ -171,7 +171,7 @@ class ClientProcess(mp.Process):
 					raise socket.error, 'No "Host" header specified in request'
 				self.send_request(filter_request(req))
 				resp = self.recv_response()
-				print '[<]', resp.get_sline()
+				print '[<]', resp.sline
 				self.send_response(filter_response(req, resp))
 				if not http_should_keep_alive(req) or not http_should_keep_alive(resp):
 					break
