@@ -1,5 +1,16 @@
 #!/usr/bin/env python
 
+"""
+Usage:
+  proxy.py [ HOST | PORT | HOST PORT ]
+  proxy.py (-h | --help)
+
+Options:
+  -h --help    show this help message
+"""
+
+from docopt import docopt
+
 import socket, multiprocessing as mp, sys, time
 from http import HttpRequest, HttpResponse
 
@@ -15,19 +26,6 @@ def filter_request(request):
 
 def filter_response(request, response):
 	return response
-
-
-def parse_host_port(string, default_host=None, default_port=None):
-	host = port = None
-	for arg in string.split():
-		a = arg.split(':')
-		try:
-			port = int(a[-1])
-		except ValueError:
-			host = arg or host
-		else:
-			host = ':'.join(a[:-1]) or host
-	return host or default_host, port or default_port
 
 
 def conn_str(addr1, addr2):
@@ -130,7 +128,8 @@ class ClientProcess(mp.Process):
 	
 	def set_server(self, host):
 		c_addr = self.client_socket.getpeername()
-		s_addr = parse_host_port(host, default_port=80)
+		s_h, s_p = (host.split(':') + [80])[:2]
+		s_addr = s_h, int(s_p)
 		try:
 			ip = socket.gethostbyname(s_addr[0])
 		except socket.error:
@@ -154,7 +153,7 @@ class ClientProcess(mp.Process):
 			resp = HttpResponse(sline='HTTP/1.1 502 Connection Refused', meta={'Connection': 'close'})
 			self.send_response(resp)
 			raise socket.error, 'Connection Refused'
-		print '[+] ' + conn_str(c_addr, s_addr)
+		print '[+] ' + conn_str(c_addr, (ip, s_addr[1]))
 	
 	def run(self):
 		try:
@@ -220,9 +219,19 @@ class Server(mp.Process):
 		try_close_socket(self.s)
 
 
+def try_reverse_host_port(host, port):
+	try:
+		int(host)
+	except (ValueError, TypeError):
+		return host, port
+	else:
+		return port, host
+
+
 def run():
-	host, port = parse_host_port(' '.join(sys.argv[1:]), 'localhost', 8080)
-	Server(host, port).run()
+	args = docopt(__doc__.replace('proxy.py', sys.argv[0]))
+	host, port = try_reverse_host_port(args['HOST'], args['PORT'])
+	Server(host or 'localhost', int(port or 8080)).run()
 
 
 if __name__ == '__main__':
