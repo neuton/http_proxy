@@ -20,6 +20,10 @@ def d(func):
 	return func
 
 
+def prefilter_request(request):
+	return request
+
+
 def filter_request(request):
 	return request
 
@@ -158,7 +162,7 @@ class ClientProcess(mp.Process):
 	def run(self):
 		try:
 			while True:
-				req = self.recv_request()
+				req = prefilter_request(self.recv_request())
 				print '[>]', req.sline
 				if req.method == 'CONNECT':	# should ignore this method in transparent scenario case (proxy host not available from http though)
 					self.set_server(req.path)
