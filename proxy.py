@@ -2,7 +2,11 @@
 
 import socket, multiprocessing as mp, sys, time
 from http import HttpRequest, HttpResponse
-import select
+
+
+def d(func):
+	globals()[func.__name__] = func
+	return func
 
 
 def filter_request(request):
@@ -62,7 +66,7 @@ def http_should_keep_alive(http):
 		return meta.get('Connection') == 'keep-alive' or meta.get('Proxy-Connection') == 'keep-alive'
 
 
-class CommunicationProcess(mp.Process):
+class TunnelProcess(mp.Process):
 	
 	def __init__(self, s1, s2, bufsize=65535):
 		mp.Process.__init__(self)
@@ -88,7 +92,7 @@ class ClientProcess(mp.Process):
 		self.bufsize = bufsize
 	
 	def run_tunnel(self):
-		cp = CommunicationProcess(self.server_socket, self.client_socket, bufsize=self.bufsize)
+		cp = TunnelProcess(self.server_socket, self.client_socket, bufsize=self.bufsize)
 		cp.start()
 		try:
 			while True:
