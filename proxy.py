@@ -2,11 +2,13 @@
 
 """
 Usage:
-  proxy.py [ HOST | PORT | HOST PORT ]
+  proxy.py [-tT TARGET] [HOST | PORT | HOST PORT]
   proxy.py (-h | --help)
 
 Options:
-  -h --help    show this help message
+  -h --help                  show this help message
+  -t --transparent           transparent proxy mode
+  -T=TARGET --target=TARGET  specify fixed target host to proxy to
 """
 
 from docopt import docopt
@@ -164,22 +166,30 @@ class ClientProcess(mp.Process):
 			while True:
 				req = prefilter_request(self.recv_request())
 				print '[>]', req.sline
-				if req.method == 'CONNECT':	# should ignore this method in transparent scenario case (proxy host not available from http though)
-					self.set_server(req.path)
+				if config['proxy'] and req.method == 'CONNECT':
+					if config['target']:
+						self.set_server(config['target'])
+					else:
+						self.set_server(req.path)
 					resp = HttpResponse(sline='HTTP/1.1 200 OK')
 					self.send_response(resp)
 					self.run_tunnel()
 					break
-				headers = req.meta
-				if 'Host' in headers:
-					host = headers['Host']
-					self.set_server(host)
+				if config['target']:
+					self.set_server(config['target'])
+				elif req.method == 'CONNECT':
+					raise socket.error, 'No TARGET specified for proxying "CONNECT" method'
+				elif 'Host' in req.meta:
+					self.set_server(req.meta['Host'])
 				elif not socket_is_connected(self.server_socket):
 					raise socket.error, 'No "Host" header specified in request'
 				self.send_request(filter_request(req))
 				resp = self.recv_response()
 				print '[<]', resp.sline
 				self.send_response(filter_response(req, resp))
+				if req.method == 'CONNECT' and resp.status == 'OK':
+					self.run_tunnel()
+					break
 				if not http_should_keep_alive(req) or not http_should_keep_alive(resp):
 					break
 		except KeyboardInterrupt:
@@ -232,9 +242,14 @@ def try_reverse_host_port(host, port):
 		return port, host
 
 
+config = {}
+
+
 def run():
 	args = docopt(__doc__.replace('proxy.py', sys.argv[0]))
 	host, port = try_reverse_host_port(args['HOST'], args['PORT'])
+	config['proxy'] = not args['--transparent']
+	config['target'] = args['--target']
 	Server(host or 'localhost', int(port or 8080)).run()
 
 
